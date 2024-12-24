@@ -1,62 +1,91 @@
+from typing import List
+
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
+from pydantic import BaseModel
 
-# If you want to run a snippet of code before or after the crew starts, 
-# you can use the @before_kickoff and @after_kickoff decorators
-# https://docs.crewai.com/concepts/crews#example-crew-class-with-decorators
+from youtube_idea_generator_crew.tools.SearchYouTubeTool import (
+    YoutubeVideoSearchAndDetailsTool,
+)
+
+
+class ResearchItem(BaseModel):
+    title: str
+    url: str
+    view_count: int
+
+
+class VideoIdea(BaseModel):
+    score: int
+    video_title: str
+    description: str
+    video_id: str
+    comment_id: str
+    research: List[ResearchItem]
+
+
+class VideoIdeasList(BaseModel):
+    video_ideas: List[VideoIdea]
+
 
 @CrewBase
-class YoutubeIdeaGeneratorCrew():
-	"""YoutubeIdeaGeneratorCrew crew"""
+class YoutubeIdeaGeneratorCrew:
+    """YoutubeIdeaGeneratorCrew"""
 
-	# Learn more about YAML configuration files here:
-	# Agents: https://docs.crewai.com/concepts/agents#yaml-configuration-recommended
-	# Tasks: https://docs.crewai.com/concepts/tasks#yaml-configuration-recommended
-	agents_config = 'config/agents.yaml'
-	tasks_config = 'config/tasks.yaml'
+    @agent
+    def comment_filter_agent(self) -> Agent:
+        return Agent(config=self.agents_config["comment_filter_agent"], verbose=True)
 
-	# If you would like to add tools to your agents, you can learn more about it here:
-	# https://docs.crewai.com/concepts/agents#agent-tools
-	@agent
-	def researcher(self) -> Agent:
-		return Agent(
-			config=self.agents_config['researcher'],
-			verbose=True
-		)
+    @agent
+    def video_idea_generator_agent(self) -> Agent:
+        return Agent(
+            config=self.agents_config["video_idea_generator_agent"], verbose=True
+        )
 
-	@agent
-	def reporting_analyst(self) -> Agent:
-		return Agent(
-			config=self.agents_config['reporting_analyst'],
-			verbose=True
-		)
+    @agent
+    def research_agent(self) -> Agent:
+        return Agent(
+            config=self.agents_config["research_agent"],
+            tools=[YoutubeVideoSearchAndDetailsTool()],
+            verbose=True,
+        )
 
-	# To learn more about structured task outputs, 
-	# task dependencies, and task callbacks, check out the documentation:
-	# https://docs.crewai.com/concepts/tasks#overview-of-a-task
-	@task
-	def research_task(self) -> Task:
-		return Task(
-			config=self.tasks_config['research_task'],
-		)
+    @agent
+    def scoring_agent(self) -> Agent:
+        return Agent(config=self.agents_config["scoring_agent"], verbose=True)
 
-	@task
-	def reporting_task(self) -> Task:
-		return Task(
-			config=self.tasks_config['reporting_task'],
-			output_file='report.md'
-		)
+    @task
+    def filter_comments_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["filter_comments_task"],
+        )
 
-	@crew
-	def crew(self) -> Crew:
-		"""Creates the YoutubeIdeaGeneratorCrew crew"""
-		# To learn how to add knowledge sources to your crew, check out the documentation:
-		# https://docs.crewai.com/concepts/knowledge#what-is-knowledge
+    @task
+    def generate_video_ideas_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["generate_video_ideas_task"],
+        )
 
-		return Crew(
-			agents=self.agents, # Automatically created by the @agent decorator
-			tasks=self.tasks, # Automatically created by the @task decorator
-			process=Process.sequential,
-			verbose=True,
-			# process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
-		)
+    @task
+    def research_video_ideas_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["research_video_ideas_task"],
+        )
+
+    @task
+    def score_video_ideas_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["score_video_ideas_task"],
+            output_pydantic=VideoIdeasList,
+        )
+
+    @crew
+    def crew(self) -> Crew:
+        """Creates the YoutubeIdeaGenerator crew"""
+        return Crew(
+            agents=self.agents,  # Automatically created by the @agent decorator
+            tasks=self.tasks,  # Automatically created by the @task decorator
+            process=Process.sequential,
+            verbose=True,
+            # process=Process.hierarchical, # In case you wanna use that instead https://docs.crewai.com/how-to/Hierarchical/
+        )
